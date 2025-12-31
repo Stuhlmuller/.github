@@ -1,0 +1,189 @@
+name: Review Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIEW_BOT_APP_ID }}
+          private-key: ${{ secrets.REVIEW_BOT_PRIVATE_KEY }}
+
+      - name: Checkout .github repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: .github-repo
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Tailscale
+        uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4
+        with:
+          authkey: ${{ secrets.TS_AUTH_KEY }}
+          tags: tag:ci
+          statedir: /tmp/tailscale-state/
+
+      - name: Read review prompt
+        id: read-prompt
+        run: |
+          PROMPT=$(cat .github-repo/.github/prompts/review-prompt.txt)
+          echo "prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Get PR information
+        id: pr-info
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER=${{ github.event.pull_request.number }}
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            PR_BODY="${{ github.event.pull_request.body }}"
+            BASE_REF="${{ github.event.pull_request.base.ref }}"
+            HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # For workflow_dispatch, require PR number input
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+            if [ -z "$PR_NUMBER" ]; then
+              echo "Error: PR number is required for workflow_dispatch"
+              exit 1
+            fi
+            # Fetch PR info from GitHub API
+            PR_DATA=$(gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName)
+            PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+            PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+            BASE_REF=$(echo "$PR_DATA" | jq -r '.baseRefName')
+            HEAD_REF=$(echo "$PR_DATA" | jq -r '.headRefName')
+          else
+            echo "Error: Unsupported event type: ${{ github.event_name }}"
+            exit 1
+          fi
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_title<<EOF" >> $GITHUB_OUTPUT
+          echo -n "$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "pr_body<<EOF" >> $GITHUB_OUTPUT
+          echo -n "${PR_BODY:-}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout PR branch (for workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          HEAD_REF="${{ steps.pr-info.outputs.head_ref }}"
+          git fetch origin $HEAD_REF
+          git checkout $HEAD_REF
+
+      - name: Generate PR diff
+        id: pr-diff
+        run: |
+          BASE_REF="${{ steps.pr-info.outputs.base_ref }}"
+          HEAD_REF="${{ steps.pr-info.outputs.head_ref }}"
+          
+          # Get diff
+          git fetch origin $BASE_REF $HEAD_REF
+          PR_DIFF=$(git diff origin/$BASE_REF...origin/$HEAD_REF || echo "")
+          
+          echo "pr_diff<<EOF" >> $GITHUB_OUTPUT
+          echo -n "$PR_DIFF" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Run prompt with LiteLLM
+        run: |
+          PROMPT_FILE=$(mktemp)
+          PR_BODY_FILE=$(mktemp)
+          PR_DIFF_FILE=$(mktemp)
+          REQUEST_FILE=$(mktemp)
+          RESPONSE_FILE=$(mktemp)
+          
+          # Write content to files to avoid shell escaping issues
+          echo "${{ steps.read-prompt.outputs.prompt }}" > "$PROMPT_FILE"
+          echo "${{ steps.pr-info.outputs.pr_body }}" > "$PR_BODY_FILE"
+          echo "${{ steps.pr-diff.outputs.pr_diff }}" > "$PR_DIFF_FILE"
+          
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          PR_TITLE="${{ steps.pr-info.outputs.pr_title }}"
+          
+          # Construct user message
+          USER_MESSAGE=$(cat <<EOF
+Please review this pull request:
+
+PR Number: $PR_NUMBER
+Title: $PR_TITLE
+
+Description:
+$(cat "$PR_BODY_FILE")
+
+Diff:
+$(cat "$PR_DIFF_FILE")
+EOF
+)
+          
+          # Construct JSON payload using jq for proper escaping
+          jq -n \
+            --arg system "$(cat "$PROMPT_FILE")" \
+            --arg user "$USER_MESSAGE" \
+            '{
+              "model": "gpt-4",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": $system
+                },
+                {
+                  "role": "user",
+                  "content": $user
+                }
+              ],
+              "temperature": 0.7
+            }' > "$REQUEST_FILE"
+          
+          # Make request to litellm API
+          curl -X POST https://litellm.stinkyboi.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.LITELLM_API_KEY }}" \
+            -d "@$REQUEST_FILE" \
+            -o "$RESPONSE_FILE"
+          
+          # Extract the review comment from response
+          REVIEW_COMMENT=$(jq -r '.choices[0].message.content' "$RESPONSE_FILE")
+          
+          # Check if review comment was extracted successfully
+          if [ -z "$REVIEW_COMMENT" ] || [ "$REVIEW_COMMENT" = "null" ]; then
+            echo "Error: Failed to extract review comment from API response"
+            echo "Response:"
+            cat "$RESPONSE_FILE"
+            exit 1
+          fi
+          
+          # Post comment to PR
+          gh pr comment $PR_NUMBER --body "$REVIEW_COMMENT"
+          
+          echo "Review completed and posted to PR #$PR_NUMBER"
+          
+          # Cleanup
+          rm -f "$PROMPT_FILE" "$PR_BODY_FILE" "$PR_DIFF_FILE" "$REQUEST_FILE" "$RESPONSE_FILE"
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
