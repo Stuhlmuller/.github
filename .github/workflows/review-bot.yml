@@ -32,5 +32,5 @@ jobs:
           OPENAI__API_BASE: https://litellm.stinkyboi.com/v1
           OPENAI__KEY: ${{ secrets.LITELLM_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          config.model: "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
+          config.model: "gpt-3.5-turbo"
           config.custom_model_max_tokens: 200000
