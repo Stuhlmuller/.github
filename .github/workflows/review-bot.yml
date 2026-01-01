@@ -33,3 +33,4 @@ jobs:
           OPENAI__KEY: ${{ secrets.LITELLM_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           config.model: "Claude Sonnet 4"
+          config.custom_model_max_tokens: 200000
