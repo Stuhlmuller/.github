@@ -1,0 +1,62 @@
+name: Policy Bot
+
+on:
+  pull_request:
+    paths:
+      - policy.yml
+      - policy-bot/**/*.yml
+      - .github/workflows/policy-bot.yml
+  push:
+    branches:
+      - main
+    paths:
+      - policy.yml
+      - policy-bot/**/*.yml
+      - .github/workflows/policy-bot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate policies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate policy files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          files=()
+
+          if [[ -f policy.yml ]]; then
+            files+=(policy.yml)
+          fi
+
+          if [[ -d policy-bot ]]; then
+            while IFS= read -r -d '' file; do
+              files+=("$file")
+            done < <(find policy-bot -type f -name '*.yml' -print0 | sort -z)
+          fi
+
+          if (( ${#files[@]} == 0 )); then
+            echo "No policy files found."
+            exit 0
+          fi
+
+          printf 'Validating %d policy file(s):\n' "${#files[@]}"
+          printf ' - %s\n' "${files[@]}"
+
+          for file in "${files[@]}"; do
+            echo "::group::policy-bot validate -p ${file}"
+            docker run --rm \
+              --volume "${PWD}:/workspace:ro" \
+              --workdir /workspace \
+              palantirtechnologies/policy-bot:1.41.1 \
+              validate -p "${file}"
+            echo "::endgroup::"
+          done
