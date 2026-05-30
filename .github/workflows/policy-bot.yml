@@ -3,6 +3,7 @@ name: Policy Bot
 on:
   pull_request:
     paths:
+      - .policy.yml
       - policy.yml
       - policy-bot/**/*.yml
       - .github/workflows/policy-bot.yml
@@ -28,6 +29,10 @@ jobs:
 
           if [[ -f policy.yml ]]; then
             files+=(policy.yml)
+          fi
+
+          if [[ -f .policy.yml ]]; then
+            files+=(.policy.yml)
           fi
 
           if [[ -d policy-bot ]]; then
