@@ -27,7 +27,7 @@ jobs:
           statedir: /tmp/tailscale-state/
       - name: PR Agent action step
         id: pragent
-        uses: qodo-ai/pr-agent@main
+        uses: qodo-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa # main
         env:
           OPENAI__API_BASE: https://litellm.stinkyboi.com/v1
           OPENAI__KEY: ${{ secrets.LITELLM_API_KEY }}
