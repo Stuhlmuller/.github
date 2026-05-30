@@ -6,13 +6,6 @@ on:
       - policy.yml
       - policy-bot/**/*.yml
       - .github/workflows/policy-bot.yml
-  push:
-    branches:
-      - main
-    paths:
-      - policy.yml
-      - policy-bot/**/*.yml
-      - .github/workflows/policy-bot.yml
   workflow_dispatch:
 
 permissions:
@@ -55,8 +48,7 @@ jobs:
             echo "::group::policy-bot validate -p ${file}"
             docker run --rm \
               --volume "${PWD}:/workspace:ro" \
-              --workdir /workspace \
               palantirtechnologies/policy-bot:1.41.1 \
-              validate -p "${file}"
+              validate -p "/workspace/${file}"
             echo "::endgroup::"
           done
