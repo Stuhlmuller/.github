@@ -1,9 +1,7 @@
 # the high level policy
 policy:
   approval:
-    - or:
-        - review bot approved
-        - organization member approved
+    - review bot reviewed
   disapproval:
     requires:
       organizations:
@@ -11,35 +9,16 @@ policy:
 
 # the list of rules
 approval_rules:
-  - name: review bot approved
-    description: "Approval from the Codex connector bot via a GitHub review or +1 comment."
+  - name: review bot reviewed
+    description: "A review signal from the Codex connector bot via an approval review or any bot-authored review/comment."
     options:
       allow_author: true
       allow_contributor: true
       methods:
-        comments:
-          - ":+1:"
         comment_patterns:
-          - '(^|\s)\+1(\s|$)'
+          - '(?s).*'
         github_review: true
-        body_patterns:
-          - '(^|\s)(:\+1:|\+1)(\s|$)'
     requires:
       count: 1
       users:
         - "chatgpt-codex-connector[bot]"
-  - name: organization member approved
-    description: "Approval from a Stuhlmuller organization member via a GitHub review or +1 comment."
-    options:
-      allow_author: true
-      allow_contributor: true
-      methods:
-        comments:
-          - ":+1:"
-        comment_patterns:
-          - '(^|\s)\+1(\s|$)'
-        github_review: true
-    requires:
-      count: 1
-      organizations:
-        - "Stuhlmuller"
