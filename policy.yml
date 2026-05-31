@@ -1,7 +1,9 @@
 # the high level policy
 policy:
   approval:
-    - pr approved
+    - or:
+        - review bot approved
+        - organization member approved
   disapproval:
     requires:
       organizations:
@@ -9,4 +11,21 @@ policy:
 
 # the list of rules
 approval_rules:
-  - name: pr approved
+  - name: review bot approved
+    options:
+      methods:
+        comments: []
+        comment_patterns: []
+        github_review: false
+        github_review_comment_patterns: []
+        body_patterns:
+          - '(^|\s)(:\+1:|\+1)(\s|$)'
+    requires:
+      count: 1
+      users:
+        - "chatgpt-codex-connector[bot]"
+  - name: organization member approved
+    requires:
+      count: 1
+      organizations:
+        - "Stuhlmuller"
