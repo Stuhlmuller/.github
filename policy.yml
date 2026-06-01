@@ -1,7 +1,9 @@
 # the high level policy
 policy:
   approval:
-    - review bot reviewed
+    - or:
+        - any approval review
+        - requested Codex connector review
   disapproval:
     requires:
       organizations:
@@ -9,14 +11,31 @@ policy:
 
 # the list of rules
 approval_rules:
-  - name: review bot reviewed
-    description: "A review signal from the Codex connector bot via an approval review or any bot-authored review/comment."
+  - name: any approval review
+    description: "Any GitHub approval review from someone with repository read access satisfies Policy Bot."
     options:
       allow_author: true
       allow_contributor: true
       methods:
-        comment_patterns:
-          - '(?s).*'
+        comments: []
+        comment_patterns: []
+        github_review: true
+    requires:
+      count: 1
+      permissions:
+        - read
+
+  - name: requested Codex connector review
+    description: "Requests the Codex connector bot for review; its approval review also satisfies Policy Bot."
+    options:
+      allow_author: true
+      allow_contributor: true
+      request_review:
+        enabled: true
+        mode: all-users
+      methods:
+        comments: []
+        comment_patterns: []
         github_review: true
     requires:
       count: 1
