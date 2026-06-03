@@ -26,7 +26,7 @@ approval_rules:
         - read
 
   - name: requested Codex connector review
-    description: "Requests the Codex connector bot for review; its approval review also satisfies Policy Bot."
+    description: "Requests the Codex connector bot for review; its approval review or thumbs-up comment satisfies Policy Bot."
     options:
       allow_author: true
       allow_contributor: true
@@ -35,7 +35,8 @@ approval_rules:
         mode: all-users
       methods:
         comments: []
-        comment_patterns: []
+        comment_patterns:
+          - '^👍(\s|$)'
         github_review: true
     requires:
       count: 1
