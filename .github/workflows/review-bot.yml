@@ -14,23 +14,32 @@ jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' }}
     runs-on: ubuntu-latest
+    env:
+      LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+      TS_AUTH_KEY: ${{ secrets.TS_AUTH_KEY }}
     permissions:
       issues: write
       pull-requests: write
       contents: read
     steps:
+      - name: Skip when LiteLLM is unavailable
+        if: ${{ env.LITELLM_API_KEY == '' }}
+        run: echo "LITELLM_API_KEY is not configured; skipping PR Agent."
+
       - name: Tailscale
+        if: ${{ env.LITELLM_API_KEY != '' && env.TS_AUTH_KEY != '' }}
         uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
         with:
-          authkey: ${{ secrets.TS_AUTH_KEY }}
+          authkey: ${{ env.TS_AUTH_KEY }}
           tags: tag:ci
           statedir: /tmp/tailscale-state/
       - name: PR Agent action step
+        if: ${{ env.LITELLM_API_KEY != '' }}
         id: pragent
-        uses: qodo-ai/pr-agent@main
+        uses: qodo-ai/pr-agent@acf1b5b0270286d307dfe14203b3c2019295d47c # main
         env:
           OPENAI__API_BASE: https://litellm.stinkyboi.com/v1
-          OPENAI__KEY: ${{ secrets.LITELLM_API_KEY }}
+          OPENAI__KEY: ${{ env.LITELLM_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           config.model: "gpt-3.5-turbo"
           config.custom_model_max_tokens: 200000
