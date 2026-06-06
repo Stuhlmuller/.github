@@ -1,44 +1,37 @@
-# the high level policy
 policy:
   approval:
-    - or:
-        - any approval review
-        - requested Codex connector review
+    - pull request commits have verified signatures
+    - rstuhlmuller approved
   disapproval:
     requires:
       organizations:
         - "Stuhlmuller"
 
-# the list of rules
 approval_rules:
-  - name: any approval review
-    description: "Any GitHub approval review from someone with repository read access satisfies Policy Bot."
-    options:
-      allow_author: true
-      allow_contributor: true
-      methods:
-        comments: []
-        comment_patterns: []
-        github_review: true
+  - name: pull request commits have verified signatures
+    description: >-
+      Every pull request commit must have a GitHub-verified signature before
+      Policy Bot can approve the change.
     requires:
-      count: 1
-      permissions:
-        - read
-
-  - name: requested Codex connector review
-    description: "Requests the Codex connector bot for review; its approval review or thumbs-up comment satisfies Policy Bot."
+      count: 0
+      conditions:
+        has_valid_signatures: true
+  - name: rstuhlmuller approved
+    description: >-
+      Count only an explicit thumbs-up comment from rstuhlmuller; this approval
+      path is valid when rstuhlmuller opened or contributed to the PR, including
+      PRs opened by rodman, and PR body text does not satisfy this rule.
     options:
       allow_author: true
       allow_contributor: true
-      request_review:
-        enabled: true
-        mode: all-users
       methods:
         comments: []
         comment_patterns:
-          - '^👍(\s|$)'
+          - '^\s*👍(\s|$)'
         github_review: true
+        github_review_comment_patterns: []
+        body_patterns: []
     requires:
       count: 1
       users:
-        - "chatgpt-codex-connector[bot]"
+        - "rstuhlmuller"
