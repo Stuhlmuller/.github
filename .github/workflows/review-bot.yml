@@ -36,7 +36,7 @@ jobs:
       - name: PR Agent action step
         if: ${{ env.LITELLM_API_KEY != '' }}
         id: pragent
-        uses: qodo-ai/pr-agent@e6046e5bb3556a3803913a23fdc84ff119d49573 # main
+        uses: qodo-ai/pr-agent@4263175b521a15b7dbe9caad6a60fe9803817aeb # main
         env:
           OPENAI__API_BASE: https://litellm.stinkyboi.com/v1
           OPENAI__KEY: ${{ env.LITELLM_API_KEY }}
